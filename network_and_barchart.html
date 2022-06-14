@@ -1,0 +1,219 @@
+!DOCTYPE html>
+<html>
+  <head>
+    <title>Network embedding of my reserach data using Vega (20 February 2020)</title>
+    <script src="https://cdn.jsdelivr.net/npm/vega@5.9.0"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-lite@4.0.2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vega-embed@6.2.1"></script>
+  </head>
+  <body>
+    <div id="vis"></div>
+
+    <script type="text/javascript">
+
+      var vegaSpec = {
+        "$schema": "https://vega.github.io/schema/vega/v5.json",
+        "width": 1200,
+        "height": 800,
+        "padding": 0,
+
+        "data": [ 
+          {
+          "name": "node-data",
+          "url": "https://raw.githubusercontent.com/kafetzakid/viz_vega/master/data_v1.json",
+          "format": {"type": "json", "property": "nodes"}
+          },
+          {
+          "name": "link-data",
+          "url": "https://raw.githubusercontent.com/kafetzakid/viz_vega/master/data_v1.json",
+          "format": {"type": "json", "property": "links"}
+          },
+          
+
+          {
+          "name": "binned",
+          "source": "node-data",
+          "transform": [
+            {"type": "aggregate", "groupby": ["Category"], "ops":["count"]},
+            {"type": "collect", "sort":{"field": "Category"}}
+          ]
+          }
+        ],
+
+        "signals": [
+          { "name": "cx", "update": "600" },
+          { "name": "cy", "update": "400" }, // height / 2
+          {
+          "description": "State variable for active node dragged status.",
+          "name": "dragged", "value": 0,
+          "on": [
+            {
+              "events": "symbol:mouseout[!event.buttons], window:mouseup",
+              "update": "0"
+            },
+            {
+              "events": "symbol:mouseover",
+              "update": "dragged || 1"
+            },
+            {
+              "events": "[symbol:mousedown, window:mouseup] > window:mousemove!",
+              "update": "2", "force": true
+            }
+          ]
+          },
+          {
+            "description": "Graph node most recently interacted with.",
+            "name": "dragged_node", "value": null,
+            "on": [
+              {
+                "events": "symbol:mouseover",
+                "update": "dragged === 1 ? item() : dragged_node"
+              }
+            ]
+          },
+          {
+            "description": "Flag to restart Force simulation upon data changes.",
+            "name": "restart", "value": false,
+            "on": [
+              {"events": {"signal": "dragged"}, "update": "dragged > 1"}
+            ]
+          }
+        ],
+
+        "scales":[
+        { 
+        "name": "colourScale",
+        "type": "ordinal",
+        "domain": {"data": "node-data", "field": "Category"},
+        "range": ["#E69F00","#56B4E9","#009E73","#F0E442","#8B008B"] // {"scheme": "category20"}
+        },
+        {
+        "name": "xscale",
+        "type": "band",
+        "domain": {"data": "binned", "field": "Category"},
+        "padding": 0.1,
+        "range": {"step": 25}
+        },
+        {
+        "name": "yscale",
+        "type": "linear",
+        "domain": [0,100],
+        "range": [300,0]
+        }
+        ],
+
+
+        "marks": [
+    {
+    "type": "group",
+    "encode": {
+      "update": {"width": {"value": 200}, "height": {"value": 200}}
+    },
+    
+    "marks": [
+    {
+      "name": "nodes",
+      "type": "symbol",
+      "zindex": 1,
+
+      "from": {"data": "node-data"},
+      "on": [
+        {
+          "trigger": "dragged",
+          "modify": "dragged_node",
+          "values": "dragged === 1 ? {fx:dragged_node.x, fy:dragged_node.y} : {fx:x(), fy:y()}"
+        },
+        {
+          "trigger": "!dragged",
+          "modify": "dragged_node", "values": "{fx: null, fy: null}"
+        }
+      ],
+
+      "encode": {
+        "enter": {
+          "fill": {"scale": "colourScale", "field": "Category"},
+          "tooltip": {"field": "Id"}
+        },
+        "update": {
+          "size": {"value": 50},
+          "cursor": {"value": "pointer"}
+        }
+      },
+
+      "transform": [
+        {
+          "type": "force",
+          "iterations": 300,
+          "velocityDecay": 0.4,
+          "restart": {"signal": "restart"},
+          "static": false,
+          "forces": [
+            {"force": "center", "x": {"signal": "cx"}, "y": {"signal": "cy"}},
+            {"force": "collide", "radius": 5},
+            {"force": "nbody", "strength": -1},                           
+            {"force": "link", "links": "link-data", "distance": 15}
+          ]
+        }
+      ]
+    },
+    {
+      "type": "path",
+      "from": {"data": "link-data"},
+      "interactive": false,
+      "encode": {
+        "update": {
+          "stroke": {"value": "lightgrey"}
+        }
+      },
+      "transform": [
+        {
+          "type": "linkpath", "shape": "line",
+          "sourceX": "datum.source.x", "sourceY": "datum.source.y",
+          "targetX": "datum.target.x", "targetY": "datum.target.y"
+        }
+      ]
+    }
+  ]
+},
+
+{
+    "type": "group",
+    "encode": {
+      "update": {"width": {"value": 150}, "height": {"value": 300}}
+    },
+    
+    "marks": [
+      {
+        "type": "rect",
+         "from": {"data":"binned"},
+         "encode": {
+            "enter": {
+        "x":{"scale": "xscale", "field": "Category"},
+        "width": {"scale": "xscale", "band": 1},
+        "y":{"scale": "yscale", "field": "count"},
+        "y2": {"scale": "yscale", "value": 0},
+        "fill": {"scale": "colourScale", "field": "Category"}
+      }
+     }
+    }
+    ],
+      "axes": [
+        {
+          "scale": "yscale",
+          "orient": "left",
+          "title": "Frequency"
+        },
+        {
+          "scale": "xscale",
+          "orient": "bottom",
+          "title": "Category"
+        }
+      ]
+}
+]
+
+      };
+      vegaEmbed('#vis', vegaSpec);
+    </script>
+  </body>
+</html>
